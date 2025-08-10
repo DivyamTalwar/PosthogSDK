@@ -27,54 +27,59 @@
   bowserScript.async = true;
   document.head.appendChild(bowserScript);
 
+  // Chain the loading: Initialize PostHog only AFTER Bowser has loaded.
   bowserScript.onload = function() {
-    // Now that Bowser is loaded, we can initialize PostHog with the full _onCapture logic
     posthog.init(config.posthogKey, {
       api_host: config.posthogHost,
-      _onCapture: (eventName, eventData) => {
-        console.log(`[PostHog SDK] Intercepted event: "${eventName}"`);
-        
-        try {
-          const parser = Bowser.getParser(window.navigator.userAgent);
-          const browser = parser.getBrowser();
-          const os = parser.getOS();
-          const platform = parser.getPlatform();
+      // The loaded callback ensures PostHog is fully ready before we use it.
+      loaded: function(posthog_instance) {
+        // Now that PostHog is ready, set up the _onCapture callback.
+        posthog_instance._onCapture = (eventName, eventData) => {
+          console.log(`[PostHog SDK] Intercepted event: "${eventName}"`);
+          
+          try {
+            // Bowser is guaranteed to be defined here.
+            const parser = Bowser.getParser(window.navigator.userAgent);
+            const browser = parser.getBrowser();
+            const os = parser.getOS();
+            const platform = parser.getPlatform();
 
-          const enrichedEvent = {
-            event: eventName,
-            properties: {
-              ...eventData.properties,
-              $current_url: window.location.href,
-              $host: window.location.host,
-              $pathname: window.location.pathname,
-              $browser: browser.name || 'Unknown',
-              $os: os.name || 'Unknown',
-              $device_type: platform.type || 'desktop',
-              $screen_height: window.screen.height,
-              $screen_width: window.screen.width,
-              distinct_id: posthog.get_distinct_id(),
-              $session_id: posthog.get_session_id(),
-            },
-            timestamp: new Date().toISOString(),
-          };
+            const enrichedEvent = {
+              event: eventName,
+              properties: {
+                ...eventData.properties,
+                $current_url: window.location.href,
+                $host: window.location.host,
+                $pathname: window.location.pathname,
+                $browser: browser.name || 'Unknown',
+                $os: os.name || 'Unknown',
+                $device_type: platform.type || 'desktop',
+                $screen_height: window.screen.height,
+                $screen_width: window.screen.width,
+                distinct_id: posthog_instance.get_distinct_id(),
+                $session_id: posthog_instance.get_session_id(),
+              },
+              timestamp: new Date().toISOString(),
+            };
 
-          // Log the enriched event to your MongoDB logging server
-          fetch(config.mongoLogApi, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(enrichedEvent),
-            keepalive: true // Ensures the request is sent even if the page is unloading
-          }).catch(error => {
-            console.error('PostHog SDK: Error logging event to MongoDB:', error);
-          });
+            // Log the enriched event to your MongoDB logging server
+            fetch(config.mongoLogApi, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(enrichedEvent),
+              keepalive: true
+            }).catch(error => {
+              console.error('PostHog SDK: Error logging event to MongoDB:', error);
+            });
 
-        } catch (error) {
-          console.error('PostHog SDK: Error in _onCapture enrichment:', error);
-        }
-        
-        // Always return the original eventData to be sent to PostHog Cloud
-        return eventData;
-      },
+          } catch (error) {
+            console.error('PostHog SDK: Error in _onCapture enrichment:', error);
+          }
+          
+          // Always return the original eventData to be sent to PostHog Cloud
+          return eventData;
+        };
+      }
     });
   };
 })();
