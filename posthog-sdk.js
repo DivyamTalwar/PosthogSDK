@@ -1,4 +1,6 @@
 (function() {
+  console.log('[PostHog SDK] Script execution started.');
+
   // Find the script tag that loaded this SDK
   const sdkScript = document.currentScript || document.querySelector('script[data-posthog-key]');
   if (!sdkScript) {
@@ -12,6 +14,8 @@
     posthogHost: sdkScript.dataset.posthogHost || 'https://app.posthog.com',
     mongoLogApi: sdkScript.dataset.mongoApiEndpoint // URL for YOUR logging server
   };
+
+  console.log('[PostHog SDK] Config loaded:', config);
 
   if (!config.posthogKey || !config.mongoLogApi) {
     console.error('PostHog SDK: Missing required data attributes. data-posthog-key and data-mongo-api-endpoint are required.');
@@ -29,10 +33,12 @@
 
   // Chain the loading: Initialize PostHog only AFTER Bowser has loaded.
   bowserScript.onload = function() {
+    console.log('[PostHog SDK] Bowser.js loaded. Initializing PostHog...');
     posthog.init(config.posthogKey, {
       api_host: config.posthogHost,
       // The loaded callback ensures PostHog is fully ready before we use it.
       loaded: function(posthog_instance) {
+        console.log('[PostHog SDK] PostHog loaded successfully. Setting up _onCapture...');
         // Now that PostHog is ready, set up the _onCapture callback.
         posthog_instance._onCapture = (eventName, eventData) => {
           console.log(`[PostHog SDK] Intercepted event: "${eventName}"`);
